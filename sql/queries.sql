@@ -37,3 +37,37 @@ JOIN olist_order_reviews_dataset r
     USING (order_id)                         -- додаємо оцінку покупця
 
 WHERE o.order_status = 'delivered';          -- залишаємо тільки доставлені замовлення
+
+
+-- ==========================================
+-- 1.2. Місячний підсумок (для прогнозу)
+-- ==========================================
+-- Формуємо агреговану таблицю по місяцях:
+-- • ym      - місяць покупки (YYYY-MM)
+-- • revenue - сумарний виторг
+-- • orders  - кількість унікальних замовлень
+
+SELECT
+    -- Місяць покупки у форматі YYYY-MM
+    strftime('%Y-%m', o.order_purchase_t) AS ym,
+
+    -- Загальний виторг за місяць
+    ROUND(SUM(oi.price), 2) AS revenue,
+
+    -- Кількість унікальних замовлень
+    COUNT(DISTINCT o.order_id) AS orders
+
+FROM olist_orders_dataset o
+
+-- Приєднуємо товари із замовлень
+JOIN olist_order_items_dataset oi
+USING (order_id)
+
+-- Беремо лише доставлені замовлення
+WHERE o.order_status = 'delivered'
+
+-- Групуємо по місяцях
+GROUP BY ym
+
+-- Сортуємо від найстарішого місяця до найновішого
+ORDER BY ym;
