@@ -71,3 +71,150 @@ GROUP BY ym
 
 -- Сортуємо від найстарішого місяця до найновішого
 ORDER BY ym;
+
+-- Розвідувальні запити
+-- =====================================================
+-- 1.3.1. Топ-10 категорій за виторгом
+-- =====================================================
+-- Логіка:
+-- беремо товари із замовлень, приєднуємо замовлення,
+-- товари та переклад категорій.
+-- Рахуємо суму price по кожній категорії.
+-- Залишаємо тільки delivered.
+
+SELECT
+    t.product_category_1 AS category_en,          -- категорія англійською
+    ROUND(SUM(oi.price), 2) AS revenue,           -- сумарний виторг
+    COUNT(DISTINCT o.order_id) AS orders          -- кількість замовлень
+FROM olist_order_items_dataset oi
+JOIN olist_orders_dataset o USING (order_id)
+JOIN olist_products_dataset p USING (product_id)
+LEFT JOIN product_category_name_translation t USING (product_category)
+WHERE o.order_status = 'delivered'
+GROUP BY category_en
+ORDER BY revenue DESC
+LIMIT 10;
+
+-- =====================================================
+-- 1.3.2. Виторг за штатами (для карти Tableau)
+-- =====================================================
+-- Логіка:
+-- 1. Беремо таблицю товарів у замовленнях (order_items),
+--    тому що саме тут знаходиться ціна товару.
+-- 2. Приєднуємо таблицю замовлень, щоб залишити
+--    тільки доставлені замовлення.
+-- 3. Приєднуємо таблицю покупців,
+--    щоб отримати штат клієнта.
+-- 4. Групуємо по штатах.
+-- 5. Рахуємо сумарний виторг та кількість замовлень.
+
+SELECT
+
+    cu.customer_state,                          -- штат покупця
+
+    ROUND(SUM(oi.price), 2) AS revenue,         -- сумарний виторг
+
+    COUNT(DISTINCT o.order_id) AS orders        -- кількість замовлень
+
+FROM olist_order_items_dataset oi
+
+JOIN olist_orders_dataset o
+USING (order_id)
+
+JOIN olist_customers_dataset cu
+USING (customer_id)
+
+WHERE o.order_status = 'delivered'
+
+GROUP BY cu.customer_state
+
+ORDER BY revenue DESC;
+
+-- =====================================================
+-- 1.3.3. Середня оцінка (review_score) за категоріями
+-- =====================================================
+-- Логіка:
+-- 1. Починаємо з таблиці відгуків.
+-- 2. Приєднуємо товари із замовлення.
+-- 3. Приєднуємо таблицю товарів.
+-- 4. Приєднуємо переклад категорій.
+-- 5. Рахуємо середню оцінку по кожній категорії.
+-- 6. Залишаємо лише категорії, де більше 50 відгуків,
+--    щоб результат був статистично надійним.
+
+SELECT
+
+    t.product_category_1 AS category_en,      -- категорія англійською
+
+    ROUND(AVG(r.review_score), 2) AS avg_score, -- середня оцінка
+
+    COUNT(*) AS reviews                       -- кількість відгуків
+
+FROM olist_order_reviews_dataset r
+
+JOIN olist_order_items_dataset oi
+USING (order_id)
+
+JOIN olist_products_dataset p
+USING (product_id)
+
+LEFT JOIN product_category_name_translation t
+USING (product_category)
+
+GROUP BY category_en
+
+HAVING reviews > 50
+
+ORDER BY avg_score DESC;
+
+-- =====================================================
+-- 1.3.4. Середній час доставки
+-- =====================================================
+-- Логіка:
+-- 1. Беремо таблицю замовлень.
+-- 2. Для кожного замовлення рахуємо:
+--    дата доставки − дата покупки.
+-- 3. julianday() переводить дату у число днів.
+-- 4. AVG() знаходить середній час доставки.
+-- 5. ROUND(...,1) округляє до одного знака після коми.
+-- 6. Беремо тільки доставлені замовлення,
+--    у яких відома дата доставки.
+
+SELECT
+
+    ROUND(
+        AVG(
+            julianday(order_delivered_6)
+            - julianday(order_purchase_t)
+        ),
+        1
+    ) AS avg_delivery_days
+
+FROM olist_orders_dataset
+
+WHERE order_status = 'delivered'
+  AND order_delivered_6 IS NOT NULL;
+
+-- =====================================================
+-- 1.3.5. Розподіл способів оплати
+-- =====================================================
+-- Логіка:
+-- 1. Беремо таблицю оплат.
+-- 2. Групуємо записи за способом оплати.
+-- 3. Рахуємо кількість оплат кожного типу.
+-- 4. Рахуємо загальну суму оплат.
+-- 5. Сортуємо від найпоширенішого способу оплати.
+
+SELECT
+
+    payment_type,                               -- спосіб оплати
+
+    COUNT(*) AS n,                              -- кількість оплат
+
+    ROUND(SUM(payment_value), 2) AS total_value -- загальна сума оплат
+
+FROM olist_order_payments_dataset
+
+GROUP BY payment_type
+
+ORDER BY n DESC;
